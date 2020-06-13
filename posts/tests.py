@@ -29,7 +29,7 @@ class TestPosts(TestCase):
         response = self.client.get(
             reverse("profile", kwargs={"username": self.user.username})
         )
-        self.assertEqual(len(Post.objects.all()), 1)
+        self.assertEqual(Post.objects.count(), 1)
         self.assertContains(
             response,
             "text",
@@ -122,7 +122,7 @@ class TestPostsCreation(TestCase):
             {"text": self.text_3}
         )
         response = self.client.get(reverse("new"))
-        self.assertEqual(len(Post.objects.all()), 1)
+        self.assertEqual(Post.objects.count(), 1)
         self.assertContains(
             response,
             "text",
@@ -136,7 +136,7 @@ class TestPostsCreation(TestCase):
         self.client.post(
             reverse("new")
         )
-        self.assertEqual(len(Post.objects.all()), 0)
+        self.assertEqual(Post.objects.count(), 0)
 
 
 class TestProfiles(TestCase):
@@ -155,9 +155,128 @@ class TestProfiles(TestCase):
         response = self.client.get(
             reverse("profile", kwargs={"username": self.user})
         )
-        self.assertEqual(response.status_code, 200) 
+        self.assertEqual(response.status_code, 200)
         self.assertIn(self.user, User.objects.all())
         with self.assertRaises(Exception, msg="Такого пользователя не существует"):
             response = self.client.get( 
                 reverse("profile", kwargs={"username": "sara"})
             )
+
+
+class TestSubFunctions(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username="sarah122",
+            email="connor122.s@skynet.com",
+            password="12345678"
+        )
+        self.user2 = User.objects.create_user(
+            username="connor122",
+            email="connor122.s@skynet.com",
+            password="123456789"
+        )
+        self.user3 = User.objects.create_user(
+            username="connor666",
+            email="connor666.s@skynet.com",
+            password="1234567890"
+        )
+        self.text_6 = "text six"
+
+    def test_auth_sub(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse(
+                "profile_follow",
+                kwargs={"username": self.user2}
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            reverse(
+                "profile_unfollow",
+                kwargs={"username": self.user2}
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_sub_posts(self):
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse(
+                "profile_follow",
+                kwargs={"username": self.user2}
+            )
+        )
+        self.client.force_login(self.user2)
+        self.client.post(
+            reverse("new"),
+            {"text": self.text_6}
+        )
+        response = self.client.get(reverse("follow_index"))
+        self.assertContains(
+            response,
+            "text",
+            count=None,
+            status_code=200,
+            msg_prefix='',
+            html=False
+        )
+        self.client.force_login(self.user3)
+        response = self.client.get(reverse("follow_index"))
+        self.assertNotContains(
+            response,
+            self.text_6,
+            status_code=200,
+            msg_prefix='',
+            html=False
+        )
+
+
+class TestComments(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username="sar122",
+            email="connor1262.s@skynet.com",
+            password="12345678152"
+        )
+        self.user2 = User.objects.create_user(
+            username="s122",
+            email="c122.s@skynet.com",
+            password="123456789648"
+        )
+        self.text_7 = "text seven"
+        self.post = Post.objects.create(text=self.text_7, author=self.user)
+
+    def test_auth_can_comment(self):
+        response = self.client.post(
+            reverse(
+                "add_comment",
+                kwargs={"username": self.user, "post_id": self.post.pk}
+            )
+        )
+        self.assertTemplateNotUsed(response=response, template_name="comments.html", msg_prefix='')
+        self.client.force_login(self.user2)
+        self.client.post(
+            reverse(
+                "add_comment",
+                kwargs={"username": self.user, "post_id": self.post.pk}
+                ),
+            {"text": self.text_7}
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse(
+                "post",
+                kwargs={"username": self.user, "post_id": self.post.pk}
+            )
+        )
+        self.assertContains(
+            response,
+            "text",
+            count=None,
+            status_code=200,
+            msg_prefix='',
+            html=False
+        )
